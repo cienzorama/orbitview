@@ -1,0 +1,2328 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+
+        <title>Babylon.js sample code</title>
+
+        <!-- Babylon.js -->
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.6.2/dat.gui.min.js"></script>
+        <script src="https://assets.babylonjs.com/generated/Assets.js"></script>
+        <script src="https://preview.babylonjs.com/ammo.js"></script>
+        <script src="https://preview.babylonjs.com/cannon.js"></script>
+        <script src="https://preview.babylonjs.com/Oimo.js"></script>
+        <script src="https://preview.babylonjs.com/earcut.min.js"></script>
+        <script src="https://preview.babylonjs.com/babylon.js"></script>
+        <script src="https://preview.babylonjs.com/materialsLibrary/babylonjs.materials.min.js"></script>
+        <script src="https://preview.babylonjs.com/proceduralTexturesLibrary/babylonjs.proceduralTextures.min.js"></script>
+        <script src="https://preview.babylonjs.com/postProcessesLibrary/babylonjs.postProcess.min.js"></script>
+        <script src="https://preview.babylonjs.com/loaders/babylonjs.loaders.js"></script>
+        <script src="https://preview.babylonjs.com/serializers/babylonjs.serializers.min.js"></script>
+        <script src="https://preview.babylonjs.com/gui/babylon.gui.min.js"></script>
+        <script src="https://preview.babylonjs.com/inspector/babylon.inspector.bundle.js"></script>
+
+        <style>
+            html, body {
+                overflow: hidden;
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                padding: 0;
+            }
+
+            #renderCanvas {
+                width: 100%;
+                height: 100%;
+                touch-action: none;
+            }
+        </style>
+    </head>
+<body>
+    <canvas id="renderCanvas"></canvas>
+    <script>
+        var canvas = document.getElementById("renderCanvas");
+
+        var startRenderLoop = function (engine, canvas) {
+            engine.runRenderLoop(function () {
+                if (sceneToRender && sceneToRender.activeCamera) {
+                    sceneToRender.render();
+                }
+            });
+        }
+
+        var engine = null;
+        var scene = null;
+        var sceneToRender = null;
+        var createDefaultEngine = function() { return new BABYLON.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true,  disableWebGL2Support: false}); };
+        //---------------------------------------------------|
+// Visualzación y generación interactiva de sistemas |
+//      planetarios usando los elementos de las      |
+//                órbitas keplerianas                |
+//                                                   |
+//               v0.06bq    21/10/2022               |
+//               cienzorama@gmail.com                |
+//---------------------------------------------------|
+
+
+zero=new BABYLON.Vector3(0,0,0);
+r=10;
+dtor=Math.PI/180.0;
+G=1.0;
+t=0;
+n_planets=0;
+max_kepler_eq_iter=10;
+tilt=23.4393*dtor;
+
+planet_sel=1;
+planet_target=1;
+animation_sel=0;
+global_counter=0;
+
+planet_target_control=0;
+follow_line=0;
+line_traj_data=[];
+line_traj_n=0;
+line_pos=[];
+line_traj_alpha=0.5;
+
+change_orbit_parameter_option=0;
+node_line_color=new BABYLON.Color3(0.074 ,0.749, 0.749);
+periapsis_line_color=new BABYLON.Color3(0.623 ,0.843,0);
+reference_line_color=new BABYLON.Color3(1,1,1);
+normalr_line_color=new BABYLON.Color3(1,1,1);
+normal_line_color=new BABYLON.Color3(1,1,0);
+semiaxis_line_color=new BABYLON.Color3(1,0,0);
+
+sprite_symbol=[];
+sprite_size=0.1;
+y_symbol=0.08;
+
+float_rect_x=0;
+float_rect_y=0;
+
+glow_orbit=[];
+plane_line=[];
+
+//Estructura de datos
+function _planet() {
+
+    this.position=null;
+    this.parent=null;
+    this.mass=null;
+    this.orbit_data=[];
+    this.orbit_line=null;
+    this.color=null;
+    this.mesh=null;
+    this.mesh_material=null;
+    this.line_material=null;
+    this.ele_a=null;
+    this.ele_e=null;
+    this.ele_i=null;
+    this.ele_w=null;
+    this.ele_N=null;
+    this.ele_M=null;
+    this.ele_epoch=null;
+    this.ele_P=null;
+}
+
+planets=[];
+
+//Objetos iniciales
+//Lista y propiedades
+var init=function() {
+
+    //Objeto central
+    var pitem=new _planet();
+    pitem.color=new BABYLON.Color3(0.97, 1, 0.51);
+    pitem.parent=-1;
+    pitem.mass=100;
+    pitem.ele_a=0;
+    pitem.ele_e=0;
+    pitem.ele_i=0;
+    pitem.ele_w=0;
+    pitem.ele_N=0;
+    pitem.ele_M=0;
+    pitem.ele_epoch=0;
+    pitem.ele_P=0;
+    pitem.position=planet_pos(pitem,t,0);
+    planets.push(pitem);
+    n_planets++;
+
+    //Objeto con algunos parámetros
+    //orbitales de La Tierra en J2000.0
+    var pitem=new _planet();
+    pitem.color=new BABYLON.Color3(0.39, 0.73, 1);
+    pitem.parent=0;
+    pitem.mass=1;
+    pitem.ele_a=1;
+    pitem.ele_e=0.0169;
+    pitem.ele_i=0.001;
+    pitem.ele_w=0.0;
+    pitem.ele_N=0.0;
+    pitem.ele_M=0.0;
+    pitem.ele_epoch=0;
+    pitem.ele_P=2*Math.PI*Math.sqrt(Math.pow(pitem.ele_a,3)/(G*planets[pitem.parent].mass));
+    pitem.position=planet_pos(pitem,t,0);
+    planets.push(pitem);
+    n_planets++;
+
+    //Luna del objeto 1
+    var pitem=new _planet();
+    pitem.color=new BABYLON.Color3(0.71, 0.71, 0.71);
+    pitem.parent=1;
+    pitem.mass=0.001;
+    pitem.ele_a=0.1;
+    pitem.ele_e=0.06;
+    pitem.ele_i=5;
+    pitem.ele_w=0.0;
+    pitem.ele_N=0.0;
+    pitem.ele_M=0.0;
+    pitem.ele_epoch=0;
+    pitem.ele_P=2*Math.PI*Math.sqrt(Math.pow(pitem.ele_a,3)/(G*planets[pitem.parent].mass));
+    pitem.position=planet_pos(pitem,t,0);
+    planets.push(pitem);
+    n_planets++;
+
+    //Objeto con algunos parámetros
+    //orbitales de Marte en J2000.0
+    var pitem=new _planet();
+    pitem.color=new BABYLON.Color3(1, 0.25, 0.25);
+    pitem.parent=0;
+    pitem.mass=0.1;
+    pitem.ele_a=1.523688;
+    pitem.ele_e=0.093405;
+    pitem.ele_i=1.85;
+    pitem.ele_w=286.5016;
+    pitem.ele_N=49.5574;
+    pitem.ele_M=0.0;
+    pitem.ele_epoch=0;
+    pitem.ele_P=2*Math.PI*Math.sqrt(Math.pow(pitem.ele_a,3)/(G*planets[pitem.parent].mass));
+    pitem.position=planet_pos(pitem,t,0);
+    planets.push(pitem);
+    n_planets++;
+
+}
+
+//Cálculo de la posición de cada planeta
+//en función de los elementos orbitales
+var planet_pos=function(itm,t1,opt) {
+
+    var a=itm.ele_a;
+    var e=itm.ele_e;
+    var ii=itm.ele_i*dtor;
+    var w=itm.ele_w*dtor;
+    var N=itm.ele_N*dtor;
+    var Mo=itm.ele_M*dtor;
+    var P=itm.ele_P;
+    var epoch=itm.ele_epoch;
+
+    //Obtención de la anomalía media
+    var M=Mo+2*Math.PI/P*(t1-epoch);
+
+    //Solución iterativa de la ecuación de Kepler
+    //mejorando la velocidad de convergencia
+    //usando el método de iteración de un punto
+    //para la obtención de la anomalía excéntrica
+    var E=M+e*Math.sin(M)*(1+e*Math.cos(M));
+    for (var i=0;i<max_kepler_eq_iter;i++) {
+        E=E-(E-e*Math.sin(E)-M)/(1-e*Math.cos(E));
+    }
+
+    //Cálculo de la posición del objeto
+    //sobre el plano de la órbita
+    //en función de la anomalía verdadera
+    //y el radio vector al foco
+    var xv=a*(Math.cos(E)-e);
+    var yv=a*(Math.sqrt(1-e*e)*Math.sin(E));
+    var nu=Math.atan2(yv,xv);
+    var rr=Math.sqrt(xv*xv+yv*yv);
+
+    //Opciones del cálculo de la posición
+    switch (opt) {
+
+        case 0:   //Resultado por defecto
+            break;
+
+        case 1:   //Posición del periapsis
+            nu=0;
+            rr=a*(1-e*e)/(1+e*Math.cos(nu));
+            break;
+           
+        case 2:   //Posición del nodo ascendente 
+            nu=-w;
+            rr=a*(1-e*e)/(1+e*Math.cos(nu));
+            break;
+
+        case 3:   //Cuadratura=periapsis+pi/2
+            nu=Math.PI/2.0;
+            rr=a*(1-e*e)/(1+e*Math.cos(nu));
+            break;
+
+    }
+
+    var cosN=Math.cos(N);
+    var sinN=Math.sin(N);
+    var cosnumw=Math.cos(nu+w);
+    var sinnumw=Math.sin(nu+w);
+    var cosii=Math.cos(ii);
+    var sinii=Math.sin(ii);
+
+    //Rotacies en función del nodo ascendete,
+    //inclinación y argumento del periapsis
+    var px=rr*(cosN*cosnumw-sinN*sinnumw*cosii);
+    var pz=rr*(sinN*cosnumw+cosN*sinnumw*cosii);
+    var py=rr*sinnumw*sinii;
+
+    if (itm.parent==-1) {
+
+        //Posición siempre fija
+        //para el objeto central
+        var x=0;
+        var y=0;
+        var z=0;
+
+    } else {
+
+        //Posición relativa al objeto parent
+        var x=px+planets[itm.parent].position.x;
+        var y=py+planets[itm.parent].position.y;
+        var z=pz+planets[itm.parent].position.z;
+
+    }
+
+    return new BABYLON.Vector3(x,y,z);
+
+}
+
+
+
+var createScene = function () {
+
+    scene = new BABYLON.Scene(engine);
+    scene.clearColor = new BABYLON.Color3(0.0, 0.0, 0.0);
+
+    //Cámara
+    var camera = new BABYLON.ArcRotateCamera("Camera", 0, 0, 10, zero, scene);
+    
+    camera.position=new BABYLON.Vector3(0,0,0);
+    camera.beta=0;
+    camera.alpha=Math.PI;
+    camera.attachControl(canvas, true);
+    camera.radius=0.5*r;
+    camera.lowerRadiusLimit=0.125*r
+    camera.upperRadiusLimit=8*r;
+    camera.fov=1.0;
+    camera.minZ=0.01;
+    camera.wheelPrecision = 10;
+    //camera.inertia=0;
+
+
+    //Solo se permite el uso del botón izquierdo 
+    //del ratón
+    camera.inputs.attached.pointers.buttons = [0];
+
+    //Desactiva algunas funciones en pantallas táctiles
+    const input = camera.inputs.attached.pointers;
+	input.multiTouchPanAndZoom = false;
+	input.multiTouchPanning = false;
+
+
+    // Iluminación
+    var light = new BABYLON.PointLight("omni", zero, scene);
+
+    //Generación y configuración de los objetos iniciales
+    init();
+
+    //Sprites para la indentificación de
+    //algunos elementos orbitales
+    sprite_symbols = new BABYLON.SpriteManager("sprite_symbols", "https://raw.githubusercontent.com/cienzorama/resources/3b572298c228be4e8ab415ed1313d017ca6c7450/orthodromic_plus/syms03.png", 5, 40);
+
+    //Nodo ascendente
+    sprite_symbol[0]=new BABYLON.Sprite(0,sprite_symbols);
+    sprite_symbol[0].cellIndex = 1;
+    sprite_symbol[0].isVisible=0;
+    sprite_symbol[0].size=sprite_size;
+    sprite_symbol[0].position=planet_pos(planets[planet_sel],t,2).add(new BABYLON.Vector3(0,y_symbol,0));;
+
+    //Periapsis
+    sprite_symbol[1]=new BABYLON.Sprite(0,sprite_symbols);
+    sprite_symbol[1].cellIndex = 2;
+    sprite_symbol[1].isVisible=0;
+    sprite_symbol[1].size=sprite_size;
+    sprite_symbol[1].position=planet_pos(planets[planet_sel],t,1).add(new BABYLON.Vector3(0,y_symbol,0));;
+    
+    //Dirección de referencia
+    sprite_symbol[2]=new BABYLON.Sprite(0,sprite_symbols);
+    sprite_symbol[2].cellIndex = 0;
+    sprite_symbol[2].isVisible=0;
+    sprite_symbol[2].size=sprite_size;
+    sprite_symbol[2].position=new BABYLON.Vector3(planets[planet_sel].ele_a,0,0);
+    
+    //Inclinación orbital
+    sprite_symbol[3]=new BABYLON.Sprite(0,sprite_symbols);
+    sprite_symbol[3].cellIndex = 3;
+    sprite_symbol[3].isVisible=0;
+    sprite_symbol[3].size=sprite_size;
+    sprite_symbol[3].position=new BABYLON.Vector3(planets[planet_sel].ele_a,0,0);
+    
+     //Semieje mayor
+    sprite_symbol[4]=new BABYLON.Sprite(0,sprite_symbols);
+    sprite_symbol[4].cellIndex = 4;
+    sprite_symbol[4].isVisible=0;
+    sprite_symbol[4].size=sprite_size;
+    sprite_symbol[4].position=new BABYLON.Vector3(planets[planet_sel].ele_a,0,0);
+    
+
+    //Generación de las líneas de las órbitas
+    gen_orbits(1);
+    //Actualización de las líneas de las órbitas
+    gen_orbits(0);
+
+
+    //Flecha indicadora del planeta seleccionado
+    const PlanetMark_shape = [
+        new BABYLON.Vector3(0, 0.1, 0),
+        new BABYLON.Vector3(0.05, 0.1, 0),
+        new BABYLON.Vector3(0.05, 0.05, 0),
+        new BABYLON.Vector3(0.25, 0.05, 0),
+        new BABYLON.Vector3(0, 0.0, 0),  
+    ];
+
+    PlanetMark = BABYLON.MeshBuilder.CreateLathe("arrow", {shape: PlanetMark_shape, radius: 0.1, tessellation:2, sideOrientation: BABYLON.Mesh.DOUBLESIDE});
+    PlanetMark.convertToFlatShadedMesh();
+
+    PlanetMark.position=planets[planet_sel].position.subtract(zero);
+    PlanetMark.position.y=planets[planet_sel].position.y+0.1;
+
+    PlanetMark_material=new BABYLON.StandardMaterial("planet_material", scene);
+    PlanetMark_material.diffuseColor=new BABYLON.Color3(1,1,1);
+    PlanetMark_material.emissiveColor = BABYLON.Color3.White();
+    PlanetMark.material=PlanetMark_material;
+
+
+    //--Esfera celeste
+    //(desactivado para acelerar la carga del programa)
+    if (1) {
+    var sky_sphere = BABYLON.MeshBuilder.CreateSphere(
+        "sky_sphere", 
+        {segmets: 32,
+        diameter: 2010.0}, 
+        scene);
+    //sky_sphere.isPickable=false;				
+
+    
+    var sky_material = new BABYLON.StandardMaterial("sky_sphere_material", scene);
+    sky_material.backFaceCulling = false;
+    sky_material.disableLighting = true;
+    sky_texture_url="https://upload.wikimedia.org/wikipedia/commons/0/01/Tycho_catalog_skymap_v2.0_%28threshold_magnitude_3.0%2C_high-res%29.jpg";
+    sky_material.diffuseTexture = new BABYLON.Texture(sky_texture_url, scene);
+    sky_material.emissiveColor = new BABYLON.Color3(1, 1, 1);
+    sky_material.diffuseTexture.uScale=1;
+    sky_material.diffuseTexture.vScale=-1;
+    sky_sphere.material = sky_material;
+    
+    sky_sphere.rotate(BABYLON.Axis.X, 0.0, BABYLON.Space.WORLD);
+    sky_sphere.rotate(BABYLON.Axis.Y, Math.PI, BABYLON.Space.WORLD);
+    sky_sphere.rotate(BABYLON.Axis.Z, 0.0, BABYLON.Space.WORLD);
+
+    sky_sphere.rotate(BABYLON.Axis.X, tilt, BABYLON.Space.WORLD);
+    sky_sphere.rotate(BABYLON.Axis.Y, 0.0, BABYLON.Space.WORLD);
+    sky_sphere.rotate(BABYLON.Axis.Z, 0.0, BABYLON.Space.WORLD);
+    
+    //-------------------
+    }
+
+    //Línea entre el planeta seleccionado
+    // y el planeta objetivo
+    var ps_line_data=[
+        new BABYLON.Vector3(NaN,NaN,NaN),
+        new BABYLON.Vector3(NaN,NaN,NaN)
+    ]
+
+    ps_line=BABYLON.MeshBuilder.CreateLines ( 
+                "target_line", 
+                {points: ps_line_data},
+                scene,
+                true);
+    ps_line.color=new BABYLON.Color3(1,1,1);
+    ps_line.isPickable=false;
+
+
+    //Trayectorias proyectadas sobre
+    //la esfera celeste
+    line_traj_data=[
+        new BABYLON.Vector3(NaN,NaN,NaN),
+        new BABYLON.Vector3(NaN,NaN,NaN)
+    ]
+
+    line_traj=BABYLON.MeshBuilder.CreateLines ( 
+                "target_line", 
+                {points: line_traj_data},
+                scene,
+                true);
+    line_traj.color=new BABYLON.Color3(1,1,0);
+    line_traj.isPickable=false;
+    line_traj.alpha=line_traj_alpha;
+
+    
+    //Plano de la eclíptica semitransparente
+    //(desactivado por defecto y
+    //probablemente no se incluya en el porgrama)
+    if (0) {
+    ecliptic_plane_material=new BABYLON.StandardMaterial("planet_material", scene);
+    ecliptic_plane_material.emissiveColor=new BABYLON.Color3(0.15,0.15,0.15);
+    ecliptic_plane_material.specularColor= new BABYLON.Color3(0,0,0);
+    ecliptic_plane_material.backFaceCulling = false;
+    ecliptic_plane_material.disableLighting = true;
+    ecliptic_plane_material.alpha=0.75;
+
+    var ecliptic_plane = BABYLON.MeshBuilder.CreateGround(
+        "ground", 
+        {height: 10, width: 10, subdivisions: 4},
+        scene);
+    ecliptic_plane.material=ecliptic_plane_material;
+    ecliptic_plane.isPickable=false;
+    //ecliptic_plane.isVisible=false;
+    }
+
+    //Efecto neón para el objeto central (Sol)
+    var glo = new BABYLON.GlowLayer("glow_effect", scene, {
+        blurKernelSize: 64
+    });
+    for (var i=0;i<n_planets;i++) {
+        glo.addExcludedMesh(planets[i].orbit_line);
+    }
+    glo.addExcludedMesh(PlanetMark);
+    //glo.addExcludedMesh(ecliptic_plane);
+    glo.intensity = 12;
+
+    //Efecto neón para la órbita del objeto seleccionado
+    var glo2 = new BABYLON.GlowLayer("glow_effect2", scene, {
+        blurKernelSize: 32
+    });
+    for (var i=0;i<n_planets;i++) {
+        glo2.addExcludedMesh(planets[i].orbit_line);
+    }
+    glo2.addExcludedMesh(PlanetMark);
+    glo2.intensity = 3;
+    
+    glo2.customEmissiveColorSelector = (mesh, subMesh, material, result) => {
+        if (mesh ==glow_orbit) {
+
+            var hsv1=planets[planet_sel].color.toHSV();
+            hsv1.g=1;hsv1.b=1;
+            var color1=BABYLON.Color3.FromHSV(hsv1.r,hsv1.g,hsv1.b);
+
+            result.r = color1.r;
+            result.g = color1.g;
+            result.b = color1.b;
+
+        } else {
+            result.r=0;
+            result.g=0;
+            result.b=0;
+        }
+    }
+
+    if (sky_sphere!=null) {
+        glo2.addExcludedMesh(sky_sphere);
+        glo.addExcludedMesh(sky_sphere);
+    }
+
+
+    //---------GUI----------------------------------------
+
+    var advancedTexture = BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI("UI");
+	
+	var al_left=BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+	var al_top=BABYLON.GUI.Control.VERTICAL_ALIGNMENT_TOP;
+    var al_right=BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_RIGHT;
+	var al_bottom=BABYLON.GUI.Control.VERTICAL_ALIGNMENT_BOTTOM;
+
+
+     //Boton de control de animación hacia delante
+    var animation_f_button = BABYLON.GUI.Button.CreateSimpleButton("fl_btn",">");
+    animation_f_button.width = "50px";
+    animation_f_button.height = "25px";
+    animation_f_button.color = "white";
+    animation_f_button.cornerRadius = 3;
+    animation_f_button.background = "green";
+    animation_f_button.top="10px";
+    animation_f_button.left="130px";
+    animation_f_button.fontSize = 26;
+    animation_f_button.horizontalAlignment = al_left;
+    animation_f_button.verticalAlignment =	al_top;	
+    animation_f_button.onPointerClickObservable.add (function() {
+
+        animation_sel++;
+        if (animation_sel>3) animation_sel=3;
+
+        if (animation_sel==0) animation_text.text="||";
+        if (animation_sel==1) animation_text.text=">";
+        if (animation_sel==2) animation_text.text=">>";
+        if (animation_sel==3) animation_text.text=">>>";
+        if (animation_sel==-1) animation_text.text="<";
+        if (animation_sel==-2) animation_text.text="<<";
+        if (animation_sel==-3) animation_text.text="<<<";
+
+        if (animation_sel==0) {
+            animation_f_button.background="green";
+            animation_b_button.background="green";
+        }
+        if (animation_sel>0) {
+            animation_f_button.background="red";
+            animation_b_button.background="green";
+        }
+        if (animation_sel<0) {
+            animation_f_button.background="green";
+            animation_b_button.background="red";
+        }
+
+    });
+    advancedTexture.addControl(animation_f_button);
+
+
+    //Botón de control de animación hacia atrás
+    var animation_b_button = BABYLON.GUI.Button.CreateSimpleButton("fl_btn","<");
+    animation_b_button.width = "50px";
+    animation_b_button.height = "25px";
+    animation_b_button.color = "white";
+    animation_b_button.cornerRadius = 3;
+    animation_b_button.background = "green";
+    animation_b_button.top="10px";
+    animation_b_button.left="5px";
+    animation_b_button.fontSize = 26;
+    animation_b_button.horizontalAlignment = al_left;
+    animation_b_button.verticalAlignment =	al_top;	
+    animation_b_button.onPointerClickObservable.add (function() {
+
+        animation_sel--;
+        if (animation_sel<-3) animation_sel=-3;
+
+        if (animation_sel==0) animation_text.text="||";
+        if (animation_sel==-1) animation_text.text="<";
+        if (animation_sel==-2) animation_text.text="<<";
+        if (animation_sel==-3) animation_text.text="<<<";
+        if (animation_sel==1) animation_text.text=">";
+        if (animation_sel==2) animation_text.text=">>";
+        if (animation_sel==3) animation_text.text=">>>";
+
+        if (animation_sel==0) {
+            animation_f_button.background="green";
+            animation_b_button.background="green";
+        }
+        if (animation_sel>0) {
+            animation_f_button.background="red";
+            animation_b_button.background="green";
+        }
+        if (animation_sel<0) {
+            animation_f_button.background="green";
+            animation_b_button.background="red";
+        }
+
+    });
+    advancedTexture.addControl(animation_b_button);
+
+
+    //Texto de animación y botón de parada
+    var animation_text = new BABYLON.GUI.TextBlock();
+    animation_text.text="||"
+    animation_text.color = "white";
+    animation_text.fontSize = 24;
+    animation_text.top="10px";
+    animation_text.left="72px";
+    animation_text.height="25px"
+    animation_text.width="40px"
+    animation_text.horizontalAlignment = al_left;
+    animation_text.verticalAlignment  = al_top;	
+    animation_text.fontFamily = 'monospace';
+    animation_text.onPointerClickObservable.add (function() {
+
+        animation_sel=0;
+        animation_text.text="||";
+        animation_f_button.background="green";
+        animation_b_button.background="green";
+        
+    });
+    advancedTexture.addControl(animation_text);
+
+    //Cuadro de opciones 1 (Tab 1)
+    var opt1_rect = new BABYLON.GUI.Rectangle();
+    opt1_rect.width = "180px";
+    opt1_rect.height = "190px";
+    opt1_rect.cornerRadius = 4;
+    opt1_rect.color = "white";
+    opt1_rect.thickness = 2;
+    opt1_rect.background = "black";
+    opt1_rect.top="73";
+    opt1_rect.left="5";
+    opt1_rect.horizontalAlignment = al_left
+    opt1_rect.verticalAlignment = al_top;
+    opt1_rect.alpha=0.6;
+    opt1_rect.isVisible=0;		
+    advancedTexture.addControl(opt1_rect);
+
+    //Cuadro de opciones 0 (Tab 0)
+    var opt0_rect = new BABYLON.GUI.Rectangle();
+    opt0_rect.width = "180px";
+    opt0_rect.height = "190px";
+    opt0_rect.cornerRadius = 4;
+    opt0_rect.color = "white";
+    opt0_rect.thickness = 2;
+    opt0_rect.background = "black";
+    opt0_rect.top="73";
+    opt0_rect.left="5";
+    opt0_rect.horizontalAlignment = al_left
+    opt0_rect.verticalAlignment = al_top;
+    opt0_rect.alpha=0.6;
+    opt0_rect.isVisible=1;		
+    advancedTexture.addControl(opt0_rect);
+
+    //Boton de opciones de sistema (tab 0)
+    var opt0_button = BABYLON.GUI.Button.CreateSimpleButton("add_planet_btn","System");
+    opt0_button.width = "60px";
+    opt0_button.height = "25px";
+    opt0_button.color = "white";
+    opt0_button.cornerRadius = 2;
+    opt0_button.thickness=2;
+    opt0_button.background = "blue";
+    opt0_button.top="50px";
+    opt0_button.left="5px";
+    opt0_button.fontSize = 12;
+    opt0_button.horizontalAlignment = al_left;
+    opt0_button.verticalAlignment =	al_top;
+    opt0_button.alpha=0.6;
+    opt0_button.IsEnabled=1;		
+    opt0_button.onPointerClickObservable.add (function() {
+
+        opt0_rect.isVisible=1;
+        opt1_rect.isVisible=0;
+        opt0_button.background="blue";
+        opt1_button.background="black";
+
+        change_orbit_parameter_option=0;
+        node_line.isVisible=change_orbit_parameter_option;
+        periapsis_line.isVisible=change_orbit_parameter_option;
+        reference_line.isVisible=change_orbit_parameter_option;
+        normal_line.isVisible=change_orbit_parameter_option;
+        normalr_line.isVisible=change_orbit_parameter_option;
+        arc_N_line.isVisible=change_orbit_parameter_option;
+        arc_w_line.isVisible=change_orbit_parameter_option;
+        arc_i_line.isVisible=change_orbit_parameter_option;
+        semiaxis_line.isVisible=change_orbit_parameter_option;
+        sprite_symbol[0].isVisible=change_orbit_parameter_option;        
+        sprite_symbol[1].isVisible=change_orbit_parameter_option; 
+        sprite_symbol[2].isVisible=change_orbit_parameter_option; 
+        sprite_symbol[3].isVisible=change_orbit_parameter_option; 
+        sprite_symbol[4].isVisible=change_orbit_parameter_option; 
+        glow_orbit.isVisible=change_orbit_parameter_option;
+        planet_line.isVisible=change_orbit_parameter_option;
+        planet_rplane.isVisible=change_orbit_parameter_option;
+
+    });
+    advancedTexture.addControl(opt0_button);
+
+
+    //Boton de opciones de parametros (tab 1)
+    var opt1_button = BABYLON.GUI.Button.CreateSimpleButton("add_planet_btn","Params.");
+    opt1_button.width = "60px";
+    opt1_button.height = "25px";
+    opt1_button.color = "white";
+    opt1_button.cornerRadius = 2;
+    opt1_button.thickness=2;
+    opt1_button.background = "black";
+    opt1_button.top="50px";
+    opt1_button.left="64px";
+    opt1_button.fontSize = 12;
+    opt1_button.horizontalAlignment = al_left;
+    opt1_button.verticalAlignment =	al_top;
+    opt1_button.alpha=0.6;
+    opt1_button.IsEnabled=1;		
+    opt1_button.onPointerClickObservable.add (function() {
+
+        opt0_rect.isVisible=0;
+        opt1_rect.isVisible=1;
+        opt0_button.background="black";
+        opt1_button.background="blue";
+
+        change_orbit_parameter_option=1;
+        node_line.isVisible=change_orbit_parameter_option;
+        periapsis_line.isVisible=change_orbit_parameter_option;
+        reference_line.isVisible=change_orbit_parameter_option;
+        normal_line.isVisible=change_orbit_parameter_option;
+        normalr_line.isVisible=change_orbit_parameter_option;
+        arc_N_line.isVisible=change_orbit_parameter_option;
+        arc_w_line.isVisible=change_orbit_parameter_option;
+        arc_i_line.isVisible=change_orbit_parameter_option;
+        semiaxis_line.isVisible=change_orbit_parameter_option;
+        sprite_symbol[0].isVisible=change_orbit_parameter_option;        
+        sprite_symbol[1].isVisible=change_orbit_parameter_option;        
+        sprite_symbol[2].isVisible=change_orbit_parameter_option; 
+        sprite_symbol[3].isVisible=change_orbit_parameter_option; 
+        sprite_symbol[4].isVisible=change_orbit_parameter_option; 
+        glow_orbit.isVisible=change_orbit_parameter_option;
+        planet_line.isVisible=change_orbit_parameter_option;
+        planet_rplane.isVisible=change_orbit_parameter_option;
+
+    });
+    advancedTexture.addControl(opt1_button);
+
+
+    //Texto de datos: semieje mayor
+    var ele_a_text = new BABYLON.GUI.TextBlock();
+    ele_a_text.text="a";
+    ele_a_text.color = "red";
+    ele_a_text.fontSize = 12;
+    ele_a_text.top="10px";
+    ele_a_text.left="10px";
+    ele_a_text.height="14px"
+    ele_a_text.width="12px";
+    ele_a_text.horizontalAlignment = al_left;
+    ele_a_text.verticalAlignment  = al_top;
+    ele_a_text.textHorizontalAlignment = al_left;
+    ele_a_text.textVerticalAlignment = al_top;		
+    ele_a_text.fontFamily = 'monospace';
+    ele_a_text.onPointerEnterObservable.add (function () {
+        float_rect.top=ele_a_text.top;
+        float_rect.left="25px";
+        float_rect_text.text="Major semiaxis";
+        float_rect.isVisible=true;
+    });
+     ele_a_text.onPointerOutObservable.add (function () {
+        float_rect.isVisible=false;
+    });
+    opt1_rect.addControl(ele_a_text);
+
+
+    //Control numérico del semieje mayor
+    var ele_a_input = new BABYLON.GUI.InputText();
+    ele_a_input.width = "53px";
+    ele_a_input.height = "18px";
+    ele_a_input.top="7px";
+    ele_a_input.left="120px";
+    ele_a_input.text = planets[planet_sel].ele_a;
+    ele_a_input.color = "white";
+    ele_a_input.background = "black";
+    ele_a_input.focusedBackground="red"; 
+    ele_a_input.horizontalAlignment = al_left;
+    ele_a_input.verticalAlignment =	al_top;
+    ele_a_input.fontSize = 12;
+    ele_a_input.fontFamily = 'monospace';
+    ele_a_input.onTextChangedObservable.add (function() {
+
+        if (isNaN(+(ele_a_input.text))==1) ele_a_input.text = ele_a_input.text.slice(0,-1);
+        
+    });
+    ele_a_input.onBlurObservable.add (function () {
+
+        if (ele_a_input.text=="") ele_a_input.text = planets[planet_sel].ele_a;
+        if (+(ele_a_input.text)>10) ele_a_input.text=10;
+        if (+(ele_a_input.text)<0.2) ele_a_input.text=0.2;
+        
+        planets[planet_sel].ele_a=+(ele_a_input.text);
+        gen_orbits(0);
+        gui_update();
+    
+    });
+    opt1_rect.addControl(ele_a_input); 
+
+    //Control de modificación del semieje mayor
+    var ele_a_slider = new BABYLON.GUI.Slider();
+    ele_a_slider.minimum = 0.2;
+    ele_a_slider.maximum = 10;
+    ele_a_slider.value = planets[planet_sel].ele_a;
+    ele_a_slider.step=0.01;
+    ele_a_slider.height = "11px";
+    ele_a_slider.width = "90px";
+    ele_a_slider.top="11px";
+    ele_a_slider.left="25px";
+    ele_a_slider.background = "gray";
+    ele_a_slider.color="gray";
+    ele_a_slider.horizontalAlignment = al_left;
+    ele_a_slider.verticalAlignment = al_top;			
+    ele_a_slider.onValueChangedObservable.add(function(value) {
+        
+        if (planets[planet_sel]==-1) return;
+
+        planets[planet_sel].ele_a=ele_a_slider.value;
+
+        planets[planet_sel].ele_P=
+        2*Math.PI*Math.sqrt(Math.pow(planets[planet_sel].ele_a,3)/(G*planets[planets[planet_sel].parent].mass));
+
+        gen_orbits(0);
+        PlanetMark.position=planets[planet_sel].position.subtract(zero);
+        PlanetMark.position.y=planets[planet_sel].position.y+0.1;
+
+        ele_a_input.text=planets[planet_sel].ele_a;
+
+    });
+    opt1_rect.addControl(ele_a_slider);
+
+
+    //Texto de datos: Eccentricity
+    var ele_e_text = new BABYLON.GUI.TextBlock();
+    ele_e_text.text="e";
+    ele_e_text.color = "white";
+    ele_e_text.fontSize = 12;
+    ele_e_text.top=30;
+    ele_e_text.left="10px";
+    ele_e_text.height="14px"
+    ele_e_text.width="12px";
+    ele_e_text.horizontalAlignment = al_left;
+    ele_e_text.verticalAlignment  = al_top;
+    ele_e_text.textHorizontalAlignment = al_left;
+    ele_e_text.textVerticalAlignment = al_top;		
+    ele_e_text.fontFamily = 'monospace';
+    ele_e_text.onPointerEnterObservable.add (function () {
+        float_rect.top=ele_e_text.top;
+        float_rect.left="25px";
+        float_rect_text.text="Eccentricity";
+        float_rect.isVisible=true;
+    });
+    ele_e_text.onPointerOutObservable.add (function () {
+        float_rect.isVisible=false;
+    });
+    opt1_rect.addControl(ele_e_text);
+
+    //Control numérico de la eccentricidad
+    var ele_e_input = new BABYLON.GUI.InputText();
+    ele_e_input.width = "53px";
+    ele_e_input.height = "18px";
+    ele_e_input.top="27px";
+    ele_e_input.left="120px";
+    ele_e_input.text = planets[planet_sel].ele_e;
+    ele_e_input.color = "white";
+    ele_e_input.background = "black";
+    ele_e_input.focusedBackground="red"; 
+    ele_e_input.horizontalAlignment = al_left;
+    ele_e_input.verticalAlignment =	al_top;
+    ele_e_input.fontSize = 12;
+    ele_e_input.fontFamily = 'monospace';
+    ele_e_input.onTextChangedObservable.add (function() {
+
+        if (isNaN(+(ele_e_input.text))==1) ele_e_input.text = ele_e_input.text.slice(0,-1);
+        
+    });
+    ele_e_input.onBlurObservable.add (function () {
+
+        if (ele_e_input.text=="") ele_e_input.text = planets[planet_sel].ele_e;
+        if (+(ele_e_input.text)>0.8) ele_e_input.text=0.8;
+        if (+(ele_e_input.text)<0) ele_e_input.text=0;
+        
+        planets[planet_sel].ele_e=+(ele_e_input.text);
+        gen_orbits(0);
+        gui_update();
+    
+    });
+    opt1_rect.addControl(ele_e_input);
+
+    //Control de modificación de la excentricidad
+    var ele_e_slider = new BABYLON.GUI.Slider();
+    ele_e_slider.minimum = 0;
+    ele_e_slider.maximum = 0.8;
+    ele_e_slider.value = planets[0].ele_e;
+    ele_e_slider.step = 0.01;
+    ele_e_slider.height = "11px";
+    ele_e_slider.width = "90px";
+    ele_e_slider.top="31px";
+    ele_e_slider.left="25px";
+    ele_e_slider.background = "gray";
+    ele_e_slider.color="gray";
+    ele_e_slider.horizontalAlignment = al_left;
+    ele_e_slider.verticalAlignment = al_top;			
+    ele_e_slider.onValueChangedObservable.add(function(value) {
+        
+        if (planets[planet_sel]==-1) return;
+
+        planets[planet_sel].ele_e=ele_e_slider.value;
+
+        gen_orbits(0);
+        PlanetMark.position=planets[planet_sel].position.subtract(zero);
+        PlanetMark.position.y=planets[planet_sel].position.y+0.1;
+
+        ele_e_input.text = planets[planet_sel].ele_e;
+
+    });
+    opt1_rect.addControl(ele_e_slider);
+
+
+    //Texto de datos: Inclinación
+    var ele_i_text = new BABYLON.GUI.TextBlock();
+    ele_i_text.text="i";
+    ele_i_text.color = normal_line_color.toHexString();
+    ele_i_text.fontSize = 12;
+    ele_i_text.top = 50;
+    ele_i_text.left="10px";
+    ele_i_text.height="14px"
+    ele_i_text.width="12px";
+    ele_i_text.horizontalAlignment = al_left;
+    ele_i_text.verticalAlignment  = al_top;
+    ele_i_text.textHorizontalAlignment = al_left;
+    ele_i_text.textVerticalAlignment = al_top;		
+    ele_i_text.fontFamily = 'monospace';
+    ele_i_text.onPointerEnterObservable.add (function () {
+        float_rect.top=ele_i_text.top;
+        float_rect.left="25px";
+        float_rect_text.text="Inclination";
+        float_rect.isVisible=true;
+    });
+    ele_i_text.onPointerOutObservable.add (function () {
+        float_rect.isVisible=false;
+    });
+    opt1_rect.addControl(ele_i_text);
+
+    //Control numérico de la inclinación
+    var ele_i_input = new BABYLON.GUI.InputText();
+    ele_i_input.width = "53px";
+    ele_i_input.height = "18px";
+    ele_i_input.top="47px";
+    ele_i_input.left = "120px";
+    ele_i_input.text = planets[planet_sel].ele_i;
+    ele_i_input.color = "white";
+    ele_i_input.background = "black";
+    ele_i_input.focusedBackground="red"; 
+    ele_i_input.horizontalAlignment = al_left;
+    ele_i_input.verticalAlignment =	al_top;
+    ele_i_input.fontSize = 12;
+    ele_i_input.fontFamily = 'monospace';
+    ele_i_input.onTextChangedObservable.add (function() {
+
+        if (isNaN(+(ele_i_input.text))==1) ele_i_input.text = ele_i_input.text.slice(0,-1);
+        
+    });
+    ele_i_input.onBlurObservable.add (function () {
+
+        if (ele_i_input.text=="") ele_i_input.text = planets[planet_sel].ele_i;
+        if (+(ele_i_input.text)>180) ele_i_input.text=180;
+        if (+(ele_i_input.text)<-180) ele_i_input.text=-180;
+        
+        planets[planet_sel].ele_i=+(ele_i_input.text);
+        gen_orbits(0);
+        gui_update();
+    
+    });
+    opt1_rect.addControl(ele_i_input);
+
+    //Control de modificación de la inclinación
+    var ele_i_slider = new BABYLON.GUI.Slider();
+    ele_i_slider.minimum = -180;
+    ele_i_slider.maximum = +180;
+    ele_i_slider.value = planets[planet_sel].ele_i;
+    ele_i_slider.step = 1;
+    ele_i_slider.height = "11px";
+    ele_i_slider.width = "90px";
+    ele_i_slider.top="51px";
+    ele_i_slider.left="25px";
+    ele_i_slider.background = "gray";
+    ele_i_slider.color="gray";
+    ele_i_slider.horizontalAlignment = al_left;
+    ele_i_slider.verticalAlignment = al_top;			
+    ele_i_slider.onValueChangedObservable.add(function(value) {
+        
+        if (planets[planet_sel]==-1) return;
+
+        planets[planet_sel].ele_i=ele_i_slider.value;
+
+        gen_orbits(0);
+        PlanetMark.position=planets[planet_sel].position.subtract(zero);
+        PlanetMark.position.y=planets[planet_sel].position.y+0.1;
+
+        ele_i_input.text = planets[planet_sel].ele_i;
+
+    });
+    opt1_rect.addControl(ele_i_slider);
+
+
+     //Texto de datos: Argumento del Periapsis
+    var ele_w_text = new BABYLON.GUI.TextBlock();
+    ele_w_text.text="w";
+    ele_w_text.color = periapsis_line_color.toHexString();
+    ele_w_text.fontSize = 12;
+    ele_w_text.top = 70;
+    ele_w_text.left="10px";
+    ele_w_text.height="14px"
+    ele_w_text.width="12px";
+    ele_w_text.horizontalAlignment = al_left;
+    ele_w_text.verticalAlignment  = al_top;
+    ele_w_text.textHorizontalAlignment = al_left;
+    ele_w_text.textVerticalAlignment = al_top;		
+    ele_w_text.fontFamily = 'monospace';
+    ele_w_text.onPointerEnterObservable.add (function () {
+        float_rect.top=ele_w_text.top;
+        float_rect.left="25px";
+        float_rect_text.text="Periapsis argument";
+        float_rect.isVisible=true;
+    });
+    ele_w_text.onPointerOutObservable.add (function () {
+        float_rect.isVisible=false;
+    });
+    opt1_rect.addControl(ele_w_text);
+
+    //Control numerico del argumento del periapsis
+    var ele_w_input = new BABYLON.GUI.InputText();
+    ele_w_input.width = "53px";
+    ele_w_input.height = "18px";
+    ele_w_input.top = "67px";
+    ele_w_input.left = "120px";
+    ele_w_input.text = planets[planet_sel].ele_w;
+    ele_w_input.color = "white";
+    ele_w_input.background = "black";
+    ele_w_input.focusedBackground="red"; 
+    ele_w_input.horizontalAlignment = al_left;
+    ele_w_input.verticalAlignment =	al_top;
+    ele_w_input.fontSize = 12;
+    ele_w_input.fontFamily = 'monospace';
+    ele_w_input.onTextChangedObservable.add (function() {
+
+        if (isNaN(+(ele_w_input.text))==1) ele_w_input.text = ele_w_input.text.slice(0,-1);
+        
+    });
+    ele_w_input.onBlurObservable.add (function () {
+
+        if (ele_w_input.text=="") ele_w_input.text = planets[planet_sel].ele_w;
+        if (+(ele_w_input.text)>360) ele_w_input.text=360;
+        if (+(ele_w_input.text)<0) ele_w_input.text=0;
+        
+        planets[planet_sel].ele_w=+(ele_w_input.text);
+        gen_orbits(0);
+        gui_update();
+    
+    });
+    opt1_rect.addControl(ele_w_input);
+
+    //Control de modificación del argumento del periapsis
+    var ele_w_slider = new BABYLON.GUI.Slider();
+    ele_w_slider.minimum =0;
+    ele_w_slider.maximum = 360;
+    ele_w_slider.value = planets[planet_sel].ele_w;
+    ele_w_slider.step = 1;
+    ele_w_slider.height = "11px";
+    ele_w_slider.width = "90px";
+    ele_w_slider.top="71px";
+    ele_w_slider.left="25px";
+    ele_w_slider.background = "gray";
+    ele_w_slider.color="gray";
+    ele_w_slider.horizontalAlignment = al_left;
+    ele_w_slider.verticalAlignment = al_top;			
+    ele_w_slider.onValueChangedObservable.add(function(value) {
+        
+        if (planets[planet_sel]==-1) return;
+
+        planets[planet_sel].ele_w=ele_w_slider.value;
+
+        gen_orbits(0);
+        PlanetMark.position=planets[planet_sel].position.subtract(zero);
+        PlanetMark.position.y=planets[planet_sel].position.y+0.1;
+
+        ele_w_input.text = planets[planet_sel].ele_w;
+
+    });
+    opt1_rect.addControl(ele_w_slider);
+
+
+    //Texto de datos: Nodo ascendente
+    var ele_n_text = new BABYLON.GUI.TextBlock();
+    ele_n_text.text="N";
+    ele_n_text.color = node_line_color.toHexString();;
+    ele_n_text.fontSize = 12;
+    ele_n_text.top = 90;
+    ele_n_text.left="10px";
+    ele_n_text.height="14px"
+    ele_n_text.width="12px";
+    ele_n_text.horizontalAlignment = al_left;
+    ele_n_text.verticalAlignment  = al_top;
+    ele_n_text.textHorizontalAlignment = al_left;
+    ele_n_text.textVerticalAlignment = al_top;		
+    ele_n_text.fontFamily = 'monospace';
+    ele_n_text.onPointerEnterObservable.add (function () {
+        float_rect.top=ele_n_text.top;
+        float_rect.left="25px";
+        float_rect_text.text="Ascendent Node";
+        float_rect.isVisible=true;
+    });
+    ele_n_text.onPointerOutObservable.add (function () {
+        float_rect.isVisible=false;
+    });
+    opt1_rect.addControl(ele_n_text);
+
+    //Control numérico del nodo ascendente
+    var ele_n_input = new BABYLON.GUI.InputText();
+    ele_n_input.width = "53px";
+    ele_n_input.height = "18px";
+    ele_n_input.top = "87px";
+    ele_n_input.left = "120px";
+    ele_n_input.text = planets[planet_sel].ele_N;
+    ele_n_input.color = "white";
+    ele_n_input.background = "black";
+    ele_n_input.focusedBackground="red"; 
+    ele_n_input.horizontalAlignment = al_left;
+    ele_n_input.verticalAlignment =	al_top;
+    ele_n_input.fontSize = 12;
+    ele_n_input.fontFamily = 'monospace';
+    ele_n_input.onTextChangedObservable.add (function() {
+
+        if (isNaN(+(ele_n_input.text))==1) ele_n_input.text = ele_n_input.text.slice(0,-1);
+        
+    });
+    ele_n_input.onBlurObservable.add (function () {
+
+        if (ele_n_input.text=="") ele_n_input.text = planets[planet_sel].ele_N;
+        if (+(ele_n_input.text)>360) ele_n_input.text=360;
+        if (+(ele_n_input.text)<0) ele_n_input.text=0;
+        
+        planets[planet_sel].ele_N=+(ele_n_input.text);
+        gen_orbits(0);
+        gui_update();
+    
+    });
+    opt1_rect.addControl(ele_n_input);
+
+    //Control de modificación del nodo ascendente
+    var ele_n_slider = new BABYLON.GUI.Slider();
+    ele_n_slider.minimum =0;
+    ele_n_slider.maximum = 360;
+    ele_n_slider.value = planets[0].ele_N;
+    ele_n_slider.step = 1;
+    ele_n_slider.height = "11px";
+    ele_n_slider.width = "90px";
+    ele_n_slider.top = "91px";
+    ele_n_slider.left = "25px";
+    ele_n_slider.background = "gray";
+    ele_n_slider.color="gray";
+    ele_n_slider.horizontalAlignment = al_left;
+    ele_n_slider.verticalAlignment = al_top;			
+    ele_n_slider.onValueChangedObservable.add(function(value) {
+        
+        if (planets[planet_sel]==-1) return;
+
+        planets[planet_sel].ele_N=ele_n_slider.value;
+
+        gen_orbits(0);
+        PlanetMark.position=planets[planet_sel].position.subtract(zero);
+        PlanetMark.position.y=planets[planet_sel].position.y+0.1;
+
+        ele_n_input.text = planets[planet_sel].ele_N;
+
+    });
+    opt1_rect.addControl(ele_n_slider);
+
+
+     //Texto de datos: Anomalía media
+    var ele_m_text = new BABYLON.GUI.TextBlock();
+    ele_m_text.text="M";
+    ele_m_text.color = "white";
+    ele_m_text.fontSize = 12;
+    ele_m_text.top = 110;
+    ele_m_text.left = "10px";
+    ele_m_text.height = "14px"
+    ele_m_text.width="12px";
+    ele_m_text.horizontalAlignment = al_left;
+    ele_m_text.verticalAlignment  = al_top;
+    ele_m_text.textHorizontalAlignment = al_left;
+    ele_m_text.textVerticalAlignment = al_top;		
+    ele_m_text.fontFamily = 'monospace';
+    ele_m_text.onPointerEnterObservable.add (function () {
+        float_rect.top=ele_m_text.top;
+        float_rect.left="25px";
+        float_rect_text.text="Mean Annomaly";
+        float_rect.isVisible=true;
+    });
+    ele_m_text.onPointerOutObservable.add (function () {
+        float_rect.isVisible=false;
+    });
+    opt1_rect.addControl(ele_m_text);
+
+
+    //Control numérico de la anomalía media
+    var ele_m_input = new BABYLON.GUI.InputText();
+    ele_m_input.width = "53px";
+    ele_m_input.height = "18px";
+    ele_m_input.top = "107px";
+    ele_m_input.left = "120px";
+    ele_m_input.text = planets[planet_sel].ele_M;
+    ele_m_input.color = "white";
+    ele_m_input.background = "black";
+    ele_m_input.focusedBackground="red"; 
+    ele_m_input.horizontalAlignment = al_left;
+    ele_m_input.verticalAlignment =	al_top;
+    ele_m_input.fontSize = 12;
+    ele_m_input.fontFamily = 'monospace';
+    ele_m_input.onTextChangedObservable.add (function() {
+
+        if (isNaN(+(ele_m_input.text))==1) ele_m_input.text = ele_m_input.text.slice(0,-1);
+        
+    });
+    ele_m_input.onBlurObservable.add (function () {
+
+        if (ele_m_input.text=="") ele_m_input.text = planets[planet_sel].ele_M;
+        if (+(ele_m_input.text)>360) ele_m_input.text=360;
+        if (+(ele_m_input.text)<0) ele_m_input.text=0;
+        
+        planets[planet_sel].ele_M=+(ele_m_input.text);
+        gen_orbits(0);
+        gui_update();
+    
+    });
+    opt1_rect.addControl(ele_m_input);
+
+    //Control de modificación de la anomalía media
+    var ele_m_slider = new BABYLON.GUI.Slider();
+    ele_m_slider.minimum =0;
+    ele_m_slider.maximum = 360;
+    ele_m_slider.value = planets[planet_sel].ele_M;
+    ele_m_slider.step = 1;
+    ele_m_slider.height = "11px";
+    ele_m_slider.width = "90px";
+    ele_m_slider.top="111px";
+    ele_m_slider.left="25px";
+    ele_m_slider.background = "gray";
+    ele_m_slider.color="gray";
+    ele_m_slider.horizontalAlignment = al_left;
+    ele_m_slider.verticalAlignment = al_top;			
+    ele_m_slider.onValueChangedObservable.add(function(value) {
+        
+        if (planets[planet_sel]==-1) return;
+
+        planets[planet_sel].ele_M=ele_m_slider.value;
+
+        gen_orbits(0);
+        PlanetMark.position=planets[planet_sel].position.subtract(zero);
+        PlanetMark.position.y=planets[planet_sel].position.y+0.1;
+
+        ele_m_input.text = planets[planet_sel].ele_M;
+
+    });
+    opt1_rect.addControl(ele_m_slider);
+
+    //Selector de color de planeta o satélite
+    var planet_color_picker = new BABYLON.GUI.ColorPicker();
+    planet_color_picker.value.copyFrom(planets[planet_sel].color);
+    planet_color_picker.height = "40px";
+    planet_color_picker.width = "40px";
+    planet_color_picker.top="130px";
+    planet_color_picker.left="10px";
+    planet_color_picker.horizontalAlignment = al_left;
+    planet_color_picker.verticalAlignment = al_top;
+    planet_color_picker.onValueChangedObservable.add(function(value) { 
+        
+
+        var temp_color=new BABYLON.Color3(1,1,1);
+        temp_color.copyFrom(value);
+
+        planets[planet_sel].color.copyFrom(temp_color);
+        planets[planet_sel].mesh_material.diffuseColor.copyFrom(temp_color);
+        planets[planet_sel].line_material.diffuseColor.copyFrom(temp_color);
+        planets[planet_sel].line_material.emissiveColor.copyFrom(temp_color);
+        
+        planets[planet_sel].orbit_line.material=planets[planet_sel].line_material;
+        
+        planet_color_picker.value=planets[planet_sel].color;
+
+    });
+    opt1_rect.addControl(planet_color_picker);
+
+
+    //Boton de añadir planeta
+    var ap_button = BABYLON.GUI.Button.CreateSimpleButton("add_planet_btn","Add planet");
+    ap_button.width = "80px";
+    ap_button.height = "25px";
+    ap_button.color = "white";
+    ap_button.cornerRadius = 3;
+    ap_button.background = "green";
+    ap_button.top = "12px";
+    ap_button.left = "5px";
+    ap_button.fontSize = 14;
+    ap_button.horizontalAlignment = al_left;
+    ap_button.verticalAlignment =	al_top;			
+    ap_button.onPointerClickObservable.add (function() {
+
+        var pitem=new _planet();
+        var pfcolor=0.5;
+        var pvcolor=1-pfcolor;
+
+        var ncolor=new BABYLON.Color3(Math.random(),
+                                      Math.random(),
+                                      Math.random());
+
+        while (ncolor.r+ncolor.g+ncolor.b<1) {
+            var ncolor=new BABYLON.Color3(Math.random(),
+                                          Math.random(),
+                                          Math.random());
+        }                                      
+
+        pitem.color=ncolor;
+        pitem.parent=0;
+        pitem.mass=0.01*Math.random();
+        pitem.ele_a=2+(2*Math.random()-1);
+        pitem.ele_e=0.2*Math.random();
+        pitem.ele_i=10*(2*Math.random()-1);
+        pitem.ele_w=360*Math.random();
+        pitem.ele_N=360*Math.random();
+        pitem.ele_M=0;
+        pitem.ele_epoch=0;
+        pitem.ele_P=2*Math.PI*Math.sqrt(Math.pow(pitem.ele_a,3)/(G*planets[pitem.parent].mass));
+        pitem.position=planet_pos(pitem,t,0);
+        planets.push(pitem);
+        n_planets++;
+
+        planet_sel=n_planets-1;
+
+        planets[planet_sel].orbit_line=BABYLON.MeshBuilder.CreateLines ( 
+                "orbit_line", 
+                {points: planets[0].orbit_data},
+                scene,
+                true);
+        planets[planet_sel].orbit_line.color=planets[planet_sel].color;
+        planets[planet_sel].orbit_line.isPickable=false;
+
+        planets[planet_sel].mesh_material=new BABYLON.StandardMaterial("planet_material", scene);
+        planets[planet_sel].mesh_material.diffuseColor=planets[planet_sel].color;
+        
+        planets[planet_sel].mesh=BABYLON.MeshBuilder.CreateSphere("planet_mesh", {diameter:0.1/2.0}, scene);
+        planets[planet_sel].mesh.material=planets[planet_sel].mesh_material;
+        planets[planet_sel].mesh.position=planets[planet_sel].position;
+
+        planets[planet_sel].line_material=new BABYLON.StandardMaterial("planet_material", scene);
+        planets[planet_sel].line_material.diffuseColor=planets[planet_sel].color;
+        planets[planet_sel].line_material.emissiveColor=planets[planet_sel].color;
+            
+        gen_orbits(0);
+
+        PlanetMark.position=planets[planet_sel].position.subtract(zero);
+        PlanetMark.position.y=planets[planet_sel].position.y+0.1;
+
+        gui_update();
+
+        glo.addExcludedMesh(planets[planet_sel].orbit_line);
+        glo2.addExcludedMesh(planets[planet_sel].orbit_line);
+
+    });
+    opt0_rect.addControl(ap_button);
+
+
+    //Boton de borrar planeta
+    var dp_button = BABYLON.GUI.Button.CreateSimpleButton("add_planet_btn","Delete");
+    dp_button.width = "80px";
+    dp_button.height = "25px";
+    dp_button.color = "white";
+    dp_button.cornerRadius = 3;
+    dp_button.background = "red";
+    dp_button.top="12px";
+    dp_button.left="90px";
+    dp_button.fontSize = 14;
+    dp_button.horizontalAlignment = al_left;
+    dp_button.verticalAlignment =	al_top;
+    dp_button.isEnabled=0;					
+    dp_button.onPointerClickObservable.add (function() {
+
+        if (planet_sel==0) return;
+        if (n_planets<3) return;
+
+        for (var i=0;i<n_planets;i++) {
+            if (planets[i].parent==planet_sel) return;
+        }
+
+        for (var i=planet_sel+1;i<n_planets;i++) {
+
+            if (planets[i].parent!=0 &&
+                planets[i].parent!=planets[planet_sel].parent) {
+
+                    planets[i].parent--;
+                }
+
+        }
+
+        planets[planet_sel].orbit_line.dispose();
+        planets[planet_sel].mesh.dispose();
+        planets.splice(planet_sel,1);
+        planet_sel=planet_sel-1;
+        n_planets--;
+
+        gen_orbits(0);
+
+        PlanetMark.position=planets[planet_sel].position.subtract(zero);
+        PlanetMark.position.y=planets[planet_sel].position.y+0.1;
+
+        gui_update();
+
+    });
+    opt0_rect.addControl(dp_button);
+
+
+     //Boton de añadir satelite
+    var asp_button = BABYLON.GUI.Button.CreateSimpleButton("add_planet_btn","Add sateliite to planet");
+    asp_button.width = "165px";
+    asp_button.height = "25px";
+    asp_button.color = "white";
+    asp_button.cornerRadius = 3;
+    asp_button.background = "green";
+    asp_button.top="45px";
+    asp_button.left="5px";
+    asp_button.fontSize = 14;
+    asp_button.horizontalAlignment = al_left;
+    asp_button.verticalAlignment =	al_top;	
+    asp_button.isEnabled=1;		
+    asp_button.onPointerClickObservable.add (function() {
+
+        if (planets[planet_sel].parent!=0) return;
+
+        var ps0=planet_sel*1.0;
+
+        var pitem=new _planet();
+
+        var ncolor=new BABYLON.Color3(Math.random(),
+                                      Math.random(),
+                                      Math.random());
+
+        while (ncolor.r+ncolor.g+ncolor.b<1) {
+            var ncolor=new BABYLON.Color3(Math.random(),
+                                          Math.random(),
+                                          Math.random());
+        }    
+        pitem.color=ncolor;
+        pitem.parent=ps0;
+        pitem.mass=0.001*Math.random();
+        pitem.ele_a=0.02+0.02*(2*Math.random()-1);
+        pitem.ele_e=0;
+        pitem.ele_i=0;
+        pitem.ele_w=0;
+        pitem.ele_N=0;
+        pitem.ele_M=0;
+        pitem.ele_epoch=0;
+        pitem.ele_P=2*Math.PI*Math.sqrt(Math.pow(pitem.ele_a,3)/(G*planets[pitem.parent].mass));
+        pitem.position=planet_pos(pitem,t,0);
+        //planets.push(pitem);
+        planets.splice(ps0+1,0,pitem)
+        n_planets++;
+
+        for (var i=ps0+2;i<n_planets;i++) {
+            if (planets[i].parent!=0 && planets[i].parent!=ps0) planets[i].parent++;
+        }
+
+        planet_sel=ps0+1;
+
+        planets[planet_sel].orbit_line=BABYLON.MeshBuilder.CreateLines ( 
+                "orbit_line", 
+                {points: planets[0].orbit_data},
+                scene,
+                true);
+        planets[planet_sel].orbit_line.color=planets[planet_sel].color;
+
+        planets[planet_sel].mesh_material=new BABYLON.StandardMaterial("planet_material", scene);
+        planets[planet_sel].mesh_material.diffuseColor=planets[planet_sel].color;
+        
+        planets[planet_sel].mesh=BABYLON.MeshBuilder.CreateSphere("planet_mesh", {diameter:0.1/2.0}, scene);
+        planets[planet_sel].mesh.material=planets[planet_sel].mesh_material;
+        planets[planet_sel].mesh.position=planets[planet_sel].position;
+
+        gen_orbits(0);
+
+        PlanetMark.position=planets[planet_sel].position.subtract(zero);
+        PlanetMark.position.y=planets[planet_sel].position.y+0.1;
+
+        gui_update();
+    });
+    opt0_rect.addControl(asp_button);
+
+
+    //Boton de control de objetivo
+    var pts_button = BABYLON.GUI.Button.CreateSimpleButton("pts_btn","Target selection");
+    pts_button.width = "165px";
+    pts_button.height = "25px";
+    pts_button.color = "white";
+    pts_button.cornerRadius = 3;
+    pts_button.background = "black";
+    pts_button.top="77px";
+    pts_button.left="5px";
+    pts_button.fontSize = 14;
+    pts_button.horizontalAlignment = al_left;
+    pts_button.verticalAlignment =	al_top;	
+    pts_button.isEnabled=1;		
+    pts_button.onPointerClickObservable.add (function() {
+
+        if (planet_target_control==1) {
+
+            planet_target_control=0;
+            pts_button.background="black";
+            planet_target=planet_sel;
+            line_update();
+
+            line_traj_data=[
+                new BABYLON.Vector3(NaN,NaN,NaN),
+                new BABYLON.Vector3(NaN,NaN,NaN)
+            ]
+
+            line_traj_n=0;
+            line_traj.dispose();
+            line_traj=BABYLON.MeshBuilder.CreateLines ( 
+                "target_line", 
+                {points: line_traj_data},
+                scene,
+                true);
+            //line_traj.color=new BABYLON.Color3(1,1,0);
+            line_traj.color=planets[planet_target].color;
+            line_traj.isPickable=false;
+            line_traj.alpha=line_traj_alpha;
+
+            follow_line=0;
+            fl_button.background="black";
+            fl_button.isEnabled=0;
+            plane_line.isVisible=0;
+            
+
+        } else {
+
+            planet_target_control=1;
+            pts_button.background="red";
+            fl_button.isEnabled=1;
+            plane_line.isVisible=1;
+            
+        }
+
+    });
+    opt0_rect.addControl(pts_button);
+
+
+
+    //Boton de control de seguir trayectoria
+    var fl_button = BABYLON.GUI.Button.CreateSimpleButton("fl_btn","Auto follow target");
+    fl_button.width = "165px";
+    fl_button.height = "25px";
+    fl_button.color = "white";
+    fl_button.cornerRadius = 3;
+    fl_button.background = "black";
+    fl_button.top="109px";
+    fl_button.left="5px";
+    fl_button.fontSize = 14;
+    fl_button.horizontalAlignment = al_left;
+    fl_button.verticalAlignment =	al_top;	
+    fl_button.isEnabled=0;		
+    fl_button.onPointerClickObservable.add (function() {
+
+        if (follow_line==0) {
+            follow_line=1;
+            fl_button.background="red";
+        } else {
+            follow_line=0;
+            fl_button.background="black";
+        }
+
+    });
+    opt0_rect.addControl(fl_button);
+
+
+    var float_rect = new BABYLON.GUI.Rectangle("fl_btn");
+    float_rect.width = "150px";
+    float_rect.height = "16px";
+    float_rect.color = "black";
+    float_rect.cornerRadius = 3;
+    float_rect.background = "black";
+    float_rect.top="10px";
+    float_rect.left="130px";
+    float_rect.horizontalAlignment = al_left;
+    float_rect.verticalAlignment =	al_top;
+    float_rect.isVisible=false;
+    opt1_rect.addControl(float_rect);
+
+    var float_rect_text = new BABYLON.GUI.TextBlock();
+    float_rect_text.text="";
+    float_rect_text.color = "white";
+    float_rect_text.fontSize = 14;
+    float_rect_text.top="0px";
+    float_rect_text.left="0px";
+    float_rect_text.height="16px"
+    float_rect_text.horizontalAlignment = al_left;
+    float_rect_text.verticalAlignment  = al_top;
+    //float_rect_text.textHorizontalAlignment = al_left;
+    //float_rect_text.textVerticalAlignment = al_top;		
+    float_rect_text.fontFamily = 'monospace';
+    float_rect.addControl(float_rect_text);
+
+
+    //Actualización de los datos
+    //de la interfaz gráfica
+    var gui_update=function() {
+
+        if (planets[planet_sel].parent<=0) {
+            sprite_size=0.1;
+            y_symbol=0.08;
+        } else {
+            sprite_size=0.1/4.0;
+            y_symbol=0.08/4.0;
+        }
+        for (var i=0;i<5;i++) sprite_symbol[i].size=sprite_size;
+
+
+        var ac=planets[planet_sel].ele_a*1.0;
+        if (planets[planet_sel].parent==0) {
+
+            camera.target=zero;
+            var px=planets[planet_sel].position.x;
+            var pz=planets[planet_sel].position.z;
+            camera.alpha=Math.atan2(pz,px)+Math.PI;
+            
+            ele_a_slider.maximum=10;
+            ele_a_slider.minimum=0.2;
+            camera.upperRadiusLimit=10*r;
+            
+        } else {
+
+            camera.target=planets[ planets[planet_sel].parent].position;
+            ele_a_slider.maximum=0.2;
+            ele_a_slider.minimum=0.01;
+            camera.upperRadiusLimit=0.5;
+        }
+
+        //planet_color_picker.value.copyFrom(planets[planet_sel].color);
+
+        planet_color_picker.value=planets[planet_sel].color;
+
+        planets[planet_sel].ele_a=ac*1.0;
+        ele_a_slider.value=planets[planet_sel].ele_a;
+        ele_e_slider.value=planets[planet_sel].ele_e;
+        ele_i_slider.value=planets[planet_sel].ele_i;
+        ele_w_slider.value=planets[planet_sel].ele_w;
+        ele_n_slider.value=planets[planet_sel].ele_N;
+        ele_m_slider.value=planets[planet_sel].ele_M;
+
+        ele_a_input.text=planets[planet_sel].ele_a;
+        ele_e_input.text=planets[planet_sel].ele_e;
+        ele_i_input.text=planets[planet_sel].ele_i;
+        ele_w_input.text=planets[planet_sel].ele_w;
+        ele_n_input.text=planets[planet_sel].ele_N;
+        ele_m_input.text=planets[planet_sel].ele_M;
+        
+        if (planets[planet_sel].parent!=0) {
+            asp_button.isEnabled=0;
+            ap_button.isEnabled=0;
+        } else {
+            asp_button.isEnabled=1;
+            ap_button.isEnabled=1;
+        }
+
+        var tiene_sat=0;
+        for (var i=1;i<n_planets;i++) {
+
+            if (planets[i].parent==planet_sel) tiene_sat=1;
+        }
+        if (tiene_sat==0) {
+            dp_button.isEnabled=1;
+        } else {
+            dp_button.isEnabled=0;
+        }
+
+        PlanetMark.position=planets[planet_sel].position.subtract(zero);
+        PlanetMark.position.y=planets[planet_sel].position.y+0.1;
+
+    }
+
+    //--------END-GUI-------------------------------------
+
+
+    //Animación
+    scene.registerBeforeRender(function () {
+
+        global_counter++;
+        PlanetMark.rotate(BABYLON.Axis.Y, 0.02, BABYLON.Space.WORLD);
+		
+        if (animation_sel!=0) {
+
+            t=t+0.01*animation_sel/9;
+    
+            gen_orbits(0);
+            line_update();
+
+            if (planet_sel!=-1) {
+                PlanetMark.position=planets[planet_sel].position.subtract(zero);
+                PlanetMark.position.y=planets[planet_sel].position.y+0.1;
+            }
+            if (planets[planet_sel].parent!=0) {
+                camera.target=planets[ planets[planet_sel].parent].position;
+                
+            }
+
+            //camera.alpha=cam_alpha;
+            //camera.beta=cam_beta;
+
+            if (planet_target_control==1) {
+
+                line_traj_data.push(line_pos);
+                line_traj_n++;
+
+                if (line_traj_n>1000) {
+
+                    line_traj_data.splice(0,1);
+                    line_traj_n--;
+                }
+
+                line_traj.dispose();
+                line_traj=BABYLON.MeshBuilder.CreateLines ( 
+                "target_line", 
+                {points: line_traj_data},
+                scene,
+                true);
+                //line_traj.color=new BABYLON.Color3(1,0,0);
+                line_traj.color=planets[planet_target].color;
+                line_traj.isPickable=false;
+                line_traj.alpha=line_traj_alpha;
+
+                if (follow_line==1 && isNaN(line_pos.x)==0) {
+
+                    var falpha=Math.atan2(line_pos.z,line_pos.x);
+                    camera.alpha=falpha+Math.PI;
+
+                }
+
+            }
+
+        } else {
+
+            cam_alpha=camera.alpha*1.0;
+            cam_beta=camera.beta*1.0;
+
+        }
+
+    });
+    
+    
+    //Eventos asociados al movimiento
+    //o pulsación del ratón
+    scene.onPointerObservable.add((pointerInfo) => {   
+
+        switch (pointerInfo.type) {
+
+            //Al pulsar el botón del ratón...
+			case BABYLON.PointerEventTypes.POINTERDOWN: 
+
+                //Valores para la transformación 3D-2D
+                var tm=scene.getTransformMatrix();
+                var idm=BABYLON.Matrix.Identity();
+                var vptog=camera.viewport.toGlobal(
+                    engine.getRenderWidth(),
+                    engine.getRenderHeight());
+                var scx=scene.pointerX;
+                var scy=scene.pointerY;
+
+                var min_dist=1e9;
+                var imin_dist=-1;
+
+                //Busca el objeto más cercano
+                //puntero del ratón...
+                for (var i=0;i<n_planets;i++) {
+
+                    var sco=BABYLON.Vector3.Project(
+                        planets[i].position,
+                        idm,
+                        tm,
+                        vptog);
+
+                    var sdx=scx-sco.x;
+                    var sdy=scy-sco.y;
+                    var sdist=Math.sqrt(sdx*sdx+sdy*sdy);
+
+                    if (sdist<min_dist) {
+
+                        min_dist=sdist;
+                        imin_dist=i;
+
+                    }
+                }
+
+               
+                //...y lo selecciona
+                if (min_dist<15 && imin_dist!=0) {
+
+                    if (planet_target_control==0) {
+                        planet_sel=imin_dist;
+                        planet_target=planet_sel;
+                        gui_update();
+                    } else {
+                        planet_target=imin_dist;
+                        line_update();
+                    }
+                }
+                
+
+                
+				break;
+
+            //Al soltar el botón del ratón...
+			case BABYLON.PointerEventTypes.POINTERUP:
+                    
+				break;
+
+            //Al mover el ratón con el botón pulsado...
+			case BABYLON.PointerEventTypes.POINTERMOVE:          
+                    
+				break;
+
+            case BABYLON.PointerEventTypes.POINTERWHEEL:
+                
+                break;    
+        }
+
+    });
+
+
+    return scene;
+};
+
+
+//Actualiza la línea a objetivo
+var line_update=function() {
+
+    var rad=1000;
+
+    var pld2=[];
+
+    if (planet_sel==planet_target) {
+
+        ps_line_data=[
+            new BABYLON.Vector3(NaN,NaN,NaN),
+            new BABYLON.Vector3(NaN,NaN,NaN)
+        ]
+
+        pld2[0]=NaN;pld2[1]=NaN;pld2[2]=NaN;
+        pld2[3]=NaN;pld2[4]=NaN;pld2[5]=NaN;
+        
+    } else {
+
+        var p1=planets[planet_sel].position.subtract(zero);
+        var p2=planets[planet_target].position.subtract(zero);
+
+        var p3=p2.subtract(p1);
+        p3.normalize();
+
+        var p4=new BABYLON.Vector3(
+            p1.x+rad*p3.x,
+            p1.y+rad*p3.y,
+            p1.z+rad*p3.z
+        )
+
+        pld2[0]=p1.x;pld2[1]=p1.y;pld2[2]=p1.z;
+        pld2[3]=p4.x;pld2[4]=p4.y;pld2[5]=p4.z;
+        
+    }
+
+    line_pos=new BABYLON.Vector3(pld2[3],pld2[4],pld2[5]);
+
+    ps_line.setVerticesData(BABYLON.VertexBuffer.PositionKind, pld2);
+
+}
+
+
+//Generación y actualización de las órbitas
+// y las posiciones de los objetos
+var gen_orbits=function(_first) {
+
+    var ndiv=100;
+    var indiv=1/(ndiv*1.0-1);
+
+    for (var i=0;i<n_planets;i++) {
+
+        var dt=planets[i].ele_P*indiv;
+        var tt=t*1.0;
+
+        var orbit_data2=[];
+        var orbit_data3=[];
+        var cnx=0;
+
+        for (var j=0;j<ndiv;j++) {
+
+            var pos=planet_pos(planets[i],tt,0);
+            tt=tt+dt;
+
+            planets[i].orbit_data[j]=pos;
+
+            if (j==0) {
+                planets[i].position=pos;
+            }
+
+            var pos_inf=pos.subtract(zero);
+            pos_inf.normalize();
+            pos_inf=pos_inf.multiplyByFloats(1000,1000,1000);
+
+            orbit_data2[cnx]=pos.x;
+            orbit_data3[cnx]=pos_inf.x; cnx++;
+
+            orbit_data2[cnx]=pos.y;
+            orbit_data3[cnx]=pos_inf.y; cnx++;
+
+            orbit_data2[cnx]=pos.z;
+            orbit_data3[cnx]=pos_inf.z; cnx++;
+
+
+        }
+
+        if (_first==1) {
+
+            planets[i].orbit_line=BABYLON.MeshBuilder.CreateLines ( 
+                "orbit_line", 
+                {points: planets[i].orbit_data},
+                scene,
+                true);
+            //planets[i].orbit_line.color=planets[i].color;
+            
+            planets[i].line_material=new BABYLON.StandardMaterial("planet_material", scene);
+            planets[i].line_material.diffuseColor=planets[i].color;
+            planets[i].line_material.emissiveColor=planets[i].color;
+            
+            planets[i].orbit_line.material=planets[i].line_material;
+
+            planets[i].orbit_line.isPickable=false;
+
+            planets[i].mesh_material=new BABYLON.StandardMaterial("planet_material", scene);
+            planets[i].mesh_material.diffuseColor=planets[i].color;
+            if (i==0) {
+                planets[i].mesh_material.emissiveColor=new BABYLON.Color3(1,1,0);
+            }
+
+            planets[i].mesh=BABYLON.MeshBuilder.CreateSphere("planet_mesh", {diameter:0.1/2.0}, scene,true);
+            planets[i].mesh.material=planets[i].mesh_material;
+            planets[i].mesh.position=planets[i].position;
+
+            if (i==planet_sel) {
+
+                glow_orbit=BABYLON.MeshBuilder.CreateLines ( 
+                "glow_orbit_line", 
+                {points: planets[i].orbit_data},
+                scene,
+                true);
+                glow_orbit.color=planets[planet_sel].color;
+                glow_orbit.isVisible=change_orbit_parameter_option;
+
+                plane_line=BABYLON.MeshBuilder.CreateLines ( 
+                "plane_line", 
+                {points: planets[i].orbit_data},
+                scene,
+                true);
+                plane_line.color=planets[planet_sel].color;
+                plane_line.alpha=0.25;
+                plane_line.isVisible=0;
+                plane_line.setVerticesData(BABYLON.VertexBuffer.PositionKind, orbit_data3);
+                
+            }
+
+            
+        } else {
+
+            planets[i].orbit_line.setVerticesData(BABYLON.VertexBuffer.PositionKind, orbit_data2);
+
+            planets[i].mesh.position=planets[i].position; 
+
+            if (i==planet_sel) {
+                glow_orbit.setVerticesData(BABYLON.VertexBuffer.PositionKind, orbit_data2);
+                glow_orbit.color=planets[planet_sel].color;
+
+                plane_line.setVerticesData(BABYLON.VertexBuffer.PositionKind, orbit_data3);
+                plane_line.color=planets[planet_sel].color;
+            }
+
+        }
+    }
+
+
+    //Periapsis y línea de nodos de la órbita seleccionada
+    var node_line_data=[
+        planets[planets[planet_sel].parent].position,
+        planet_pos(planets[planet_sel],tt,2)
+    ];
+    var periapsis_line_data=[
+        planets[planets[planet_sel].parent].position,
+        planet_pos(planets[planet_sel],tt,1)
+    ];
+
+    //Dirección de referencia
+    var reference_line_data=[
+        planets[planets[planet_sel].parent].position,
+        planets[planets[planet_sel].parent].position.add(
+        new BABYLON.Vector3(planets[planet_sel].ele_a,0,0))
+    ];
+
+
+    //Dirección normal al plano de la órbita
+    var p0=planets[planets[planet_sel].parent].position;
+    var p1=planet_pos(planets[planet_sel],tt,1);
+    var p2=planet_pos(planets[planet_sel],tt,3);
+
+    p1=p1.subtract(p0);
+    p2=p2.subtract(p0);
+
+    p1=p1.normalize();
+    p2=p2.normalize();
+
+    var p3=p1.cross(p2);
+    var c0=-1.0*planets[planet_sel].ele_a;
+    p3=p3.multiplyByFloats(c0,c0,c0);
+    var normal_line_data=[
+        p0,
+        p0.add(p3)
+    ];
+    
+
+    //Dirección normal al plano de referencia
+    var normalr_line_data=[
+        planets[planets[planet_sel].parent].position,
+        planets[planets[planet_sel].parent].position.add(new BABYLON.Vector3(0,planets[planet_sel].ele_a,0))
+    ]
+
+    var psp=planets[planet_sel].position.subtract(zero);
+    //Línea entre el parent y el objeto
+    var planet_line_data=[
+        p0,
+        psp
+    ]
+
+    //Línea entre el objeto y el plano de referencia
+    //centrado en el parent
+    var planet_rplane_data=[
+        psp,
+        new BABYLON.Vector3(psp.x,p0.y,psp.z)
+    ]
+
+    var n_ang=20;
+    var arc_N_line_data=[];
+    var arc_w_line_data=[];
+    var arc_i_line_data=[];
+
+    var Nv=node_line_data[1].subtract(node_line_data[0]);
+    var zv=normalr_line_data[1].subtract(normalr_line_data[0]);
+    var rv=reference_line_data[1].subtract(reference_line_data[0]);
+    var wv=periapsis_line_data[1].subtract(periapsis_line_data[0]);
+    var iv=normal_line_data[1].subtract(normal_line_data[0]);
+
+    Nv.normalize();
+    rv.normalize();
+    zv.normalize();
+    wv.normalize();
+    iv.normalize();
+
+    var Nr_ang=Math.atan2(Nv.z,Nv.x);
+    if (Nr_ang<0) Nr_ang=Nr_ang+2*Math.PI;
+    var Nr_aux=BABYLON.Vector3.Cross(rv,zv);
+    var rN=BABYLON.Vector3.Distance(node_line_data[1],node_line_data[0])/2.0;
+    
+    var prwNx=BABYLON.Vector3.Dot(Nv,wv);
+    var Nw_aux=BABYLON.Vector3.Cross(Nv,iv);
+    var prwNy=BABYLON.Vector3.Dot(Nw_aux,wv);
+    var Nw_ang=Math.atan2(prwNy,prwNx);
+    if (Nw_ang<0) Nw_ang=Nw_ang+2*Math.PI;
+    if (Nw_ang==2*Math.PI) Nw_ang=0;
+    var rw=BABYLON.Vector3.Distance(periapsis_line_data[1],periapsis_line_data[0])/2.0;
+    
+    var iv_aux=BABYLON.Vector3.Cross(Nv,zv);
+    var prix=BABYLON.Vector3.Dot(iv,zv);
+    var priy=BABYLON.Vector3.Dot(iv,iv_aux);
+    var iv_ang=Math.atan2(priy,prix);
+
+    //var ivCwv=BABYLON.Vector3.Cross(wv,iv);
+    var ivCwv=iv.subtract(zero);
+    ivCwv=ivCwv.multiplyByFloats(-c0*0.05,-c0*0.05,-c0*0.05);
+
+    var semiaxis_line_data=[
+        periapsis_line_data[1],
+        periapsis_line_data[1].add(ivCwv),
+        (periapsis_line_data[1].add(new BABYLON.Vector3(wv.x*c0/2,wv.y*c0/2,wv.z*c0/2)).add(ivCwv)),
+        (periapsis_line_data[1].add(new BABYLON.Vector3(wv.x*c0,wv.y*c0,wv.z*c0)).add(ivCwv)),
+        (periapsis_line_data[1].add(new BABYLON.Vector3(wv.x*c0,wv.y*c0,wv.z*c0)))
+    ];
+
+    for (var i=0;i<n_ang+1;i++) {
+
+        var inc=i/(n_ang*1.0);
+
+        var ang=Nr_ang*inc;
+
+        var cos_ang=Math.cos(ang);
+        var sin_ang=Math.sin(ang);
+
+        arc_N_line_data[i]=new BABYLON.Vector3(
+            (rv.x*cos_ang+Nr_aux.x*sin_ang)*rN+p0.x,
+            (rv.y*cos_ang+Nr_aux.y*sin_ang)*rN+p0.y,
+            (rv.z*cos_ang+Nr_aux.z*sin_ang)*rN+p0.z
+        );
+
+        var ang=Nw_ang*inc;
+
+        var cos_ang=Math.cos(ang);
+        var sin_ang=Math.sin(ang);
+
+        arc_w_line_data[i]=new BABYLON.Vector3(
+            (Nv.x*cos_ang+Nw_aux.x*sin_ang)*rw+p0.x,
+            (Nv.y*cos_ang+Nw_aux.y*sin_ang)*rw+p0.y,
+            (Nv.z*cos_ang+Nw_aux.z*sin_ang)*rw+p0.z
+        );
+
+        var ang=iv_ang*inc;
+
+        var cos_ang=Math.cos(ang);
+        var sin_ang=Math.sin(ang);
+
+        arc_i_line_data[i]=new BABYLON.Vector3(
+            (zv.x*cos_ang+iv_aux.x*sin_ang)*rN+p0.x,
+            (zv.y*cos_ang+iv_aux.y*sin_ang)*rN+p0.y,
+            (zv.z*cos_ang+iv_aux.z*sin_ang)*rN+p0.z
+        );
+        
+    }
+
+    
+    if (_first==0) {
+
+        node_line.dispose();
+        periapsis_line.dispose();
+        reference_line.dispose();
+        normal_line.dispose();
+        normalr_line.dispose();
+        arc_N_line.dispose();
+        arc_w_line.dispose();
+        arc_i_line.dispose();
+        semiaxis_line.dispose();
+        planet_line.dispose();
+        planet_rplane.dispose();
+
+        sprite_symbol[0].isVisible=change_orbit_parameter_option;
+        sprite_symbol[0].position=arc_N_line_data[n_ang/2].add(new BABYLON.Vector3(0,y_symbol,0));
+
+        sprite_symbol[1].isVisible=change_orbit_parameter_option;
+        sprite_symbol[1].position=arc_w_line_data[n_ang/2].add(new BABYLON.Vector3(0,y_symbol,0));
+        
+        sprite_symbol[2].isVisible=change_orbit_parameter_option;
+        sprite_symbol[2].position=reference_line_data[1].add(new BABYLON.Vector3(0,y_symbol,0));
+        
+        sprite_symbol[3].isVisible=change_orbit_parameter_option;
+        sprite_symbol[3].position=arc_i_line_data[n_ang/2].add(new BABYLON.Vector3(0,y_symbol,0));
+        
+        sprite_symbol[4].isVisible=change_orbit_parameter_option;
+        sprite_symbol[4].position=semiaxis_line_data[2].add(new BABYLON.Vector3(0,y_symbol,0));
+        
+    }
+
+    node_line=BABYLON.MeshBuilder.CreateLines ( 
+                    "node_line", 
+                    {points: node_line_data},
+                    scene,
+                    true);
+    node_line.color=node_line_color;
+    node_line.isPickable=false;
+    node_line.isVisible=change_orbit_parameter_option;
+    
+    periapsis_line=BABYLON.MeshBuilder.CreateLines ( 
+                    "periapsis_line", 
+                    {points: periapsis_line_data},
+                    scene,
+                    true);
+    periapsis_line.color=periapsis_line_color;
+    periapsis_line.isPickable=false;
+    periapsis_line.isVisible=change_orbit_parameter_option;
+
+    reference_line=BABYLON.MeshBuilder.CreateLines ( 
+                    "reference_line", 
+                    {points: reference_line_data},
+                    scene,
+                    true);
+    reference_line.color=reference_line_color;
+    reference_line.isPickable=false;
+    reference_line.isVisible=change_orbit_parameter_option;
+
+    normal_line=BABYLON.MeshBuilder.CreateLines ( 
+                    "normal_line", 
+                    {points: normal_line_data},
+                    scene,
+                    true);
+    normal_line.color=normal_line_color;
+    normal_line.isPickable=false;
+    normal_line.isVisible=change_orbit_parameter_option;
+
+    normalr_line=BABYLON.MeshBuilder.CreateLines ( 
+                    "normalr_line", 
+                    {points: normalr_line_data},
+                    scene,
+                    true);
+    normalr_line.color=normalr_line_color;
+    normalr_line.isPickable=false;
+    normalr_line.isVisible=change_orbit_parameter_option;
+
+    arc_N_line=BABYLON.MeshBuilder.CreateLines ( 
+                    "arc_N_line", 
+                    {points: arc_N_line_data},
+                    scene,
+                    true);
+    arc_N_line.color=node_line_color;
+    arc_N_line.isPickable=false;
+    arc_N_line.isVisible=change_orbit_parameter_option;
+
+    arc_w_line=BABYLON.MeshBuilder.CreateLines ( 
+                    "arc_w_line", 
+                    {points: arc_w_line_data},
+                    scene,
+                    true);
+    arc_w_line.color=periapsis_line_color;
+    arc_w_line.isPickable=false;
+    arc_w_line.isVisible=change_orbit_parameter_option;
+
+    arc_i_line=BABYLON.MeshBuilder.CreateLines ( 
+                    "arc_i_line", 
+                    {points: arc_i_line_data},
+                    scene,
+                    true);
+    arc_i_line.color=normal_line_color;
+    arc_i_line.isPickable=false;
+    arc_i_line.isVisible=change_orbit_parameter_option;
+
+    semiaxis_line=BABYLON.MeshBuilder.CreateLines ( 
+                    "semiaxis_line", 
+                    {points: semiaxis_line_data},
+                    scene,
+                    true);
+    semiaxis_line.color=semiaxis_line_color;
+    semiaxis_line.isPickable=false;
+    semiaxis_line.isVisible=change_orbit_parameter_option;
+
+
+    planet_line=BABYLON.MeshBuilder.CreateLines ( 
+                    "semiaxis_line", 
+                    {points: planet_line_data},
+                    scene,
+                    true);
+    planet_line.color=planets[planet_sel].color;
+    planet_line.isPickable=false;
+    planet_line.isVisible=change_orbit_parameter_option;
+
+
+    planet_rplane=BABYLON.MeshBuilder.CreateLines ( 
+                    "semiaxis_line", 
+                    {points: planet_rplane_data},
+                    scene,
+                    true);
+    planet_rplane.color=planets[planet_sel].color;
+    planet_rplane.isPickable=false;
+    planet_rplane.isVisible=change_orbit_parameter_option;
+    
+}
+                window.initFunction = async function() {
+                    
+                    
+                    var asyncEngineCreation = async function() {
+                        try {
+                        return createDefaultEngine();
+                        } catch(e) {
+                        console.log("the available createEngine function failed. Creating the default engine instead");
+                        return createDefaultEngine();
+                        }
+                    }
+
+                    window.engine = await asyncEngineCreation();
+        if (!engine) throw 'engine should not be null.';
+        startRenderLoop(engine, canvas);
+        window.scene = createScene();};
+        initFunction().then(() => {sceneToRender = scene                    
+        });
+
+        // Resize
+        window.addEventListener("resize", function () {
+            engine.resize();
+        });
+    </script>
+</body>
+</html>
